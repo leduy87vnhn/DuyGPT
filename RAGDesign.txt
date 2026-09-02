@@ -1,0 +1,117 @@
+Tôi muốn nâng cấp 2 điểm
+Thứ nhất, dựng server postgresql để quản lý user và lưu được nội dung chat (có thể không phải toàn bộ mà chỉ 1 phần chat). User tự do đăng ký, nhưng user admin có mật khẩu abcd@123 thì là duy nhất, không ai có thể đăng ký user admin. Bảng user sẽ có phân loại user_type là normal_user và admin_user
+
+Thứ hai, cần dựng tinh năng RAG để admin user có thể nạp thêm tài liệu cho server AI 
+Tôi muốn nâng cấp thêm 1 điểm, hiện tại mới có service AI Chat 8383 thôi
+Tôi muốn triển khai thêm thành hệ thống AI Voice Chat mà nhân vật chat sẽ có tính cách và nhớ được các thông tin tôi đã nạp vào qua RAG
+Cụ thể:
+Edge: có raspberry PI và respeaker và loa để giao tiếp với user, sẽ capture âm thanh, sử dụng speech recognition nào đó để trích lấy câu hỏi hoặc câu nói của user. Sau đó 
+Server: cung cấp 2 dịch vụ: speech recognition và AI chat analysis
+- Speech recognition: nhận file âm thanh qua API, phân tích thành text và phản hồi
+- AI Chat analysis: nhận câu request từ raspberry pi dưới dạng text và phân tích, xử lý, trả lời dưới dạng text (có sử dụng thêm kiến thức thu thập qua RAG)
+
+Phần phía Edge thì toi sẽ làm việc sau. 
+Hãy xử lý giúp tôi phần phía server local DuyGPT. Có thể phải thêm API, thêm port thì tôi sẽ xử lý port forwarding trên wireguard server sau. 
+
+Về speech recognition và AI Chat Analysis thì tôi cần dùng port nào, API nào? Hãy ghi hướng dẫn và sample request vào file readme.md 
+
+Về API /api/admin/persona
+Tôi cần trên web có thể cho admin điền trực tiếp thông tin này và lưu lại.
+Hãy chọn độ dài phù hợp. Cơ bản thì chỉ có 1 edge user thôi nên nhân vật cần có mô tả tính cách dài một chút. Khoảng vài trang giấy.  
+
+Cái nội dung block gồm Log in, Provider, Model, Temperature, thì cần có 1 button hay icon gì đó cho collapse và expand để đỡ tốn diện tích màn hình
+Cả history cũng thêm 1 icon nữa để collapse đi được 
+Cả Documents RAG cũng vậy
+
+
+Ở màn hình http://localhost:8383/
+Tôi muốn có thể nhập được nội dung chat Message bằng cách ghi âm.
+User click vào biểu tượng ghi âm bên trái button Send để bắt đầu ghi âm, khi xong thì click lại vào biểu tượng để gửi bản ghi âm cho server.
+Server xử lý file ghi âm và trả về nội dung bằng tiếng Việt và hiển thị luôn trên ô Chat, nhưng không tự động send (hình như server này tức chính PC này đã cài Whishper, nếu Whisper không đủ độ chính xác thì dùng mô hình AI tôi đã cài đặt như mistral để xử lý nếu được)  
+User có thể truy cập từ máy khác 
+
+
+Tôi đang cần demo một hệ thống nhập liệu bằng AI
+Hãy tạo luôn trên server này 1 trang nhập thông tin user, gồm các label và text box:
+
+Họ và tên
+Địa chỉ
+Số điện thoại
+
+Khi user ghi âm 
+
+Địa chỉ đường dẫn của trang này là
+http://localhost:8383/user_info
+
+Trang này không cần nhập gì vào database, chỉ cần có button ghi âm, cho user ghi âm và dựa theo nội dung thì sẽ tự phân tách và đổ dữ liệu vào các ô text box trên giao diện
+Ví dụ, user nói "Họ và tên Lê Duy" thì text box Họ và tên sẽ được điền chữ "Le Duy"
+
+Button ghi âm nên đưa ra service riêng có https vì các trình duyệt sẽ chặn ghi âm với https 
+
+Không đúng, tôi lại muốn là user vẫn mở trang user_info bằng http (vì khách hàng họ đã quen trang này là http), còn khi click ghi âm có thể mở ra 1 popup để ghi âm, popup hoặc page mới này mới là https, và ghi âm xong vào điền data ngược lại trang user_info có http 
+
+Popup to quá che hết trang nhập liệu
+Tôi muốn nó nhỏ nhỏ thôi , chỉ to bằng 4 lần cái button, để không che chữ trên trang user_info
+
+AI chat hiện nay đang không xuất được ảnh theo yêu cầu. có giải pháp gì không? Ví dụ như cài 1 phần mềm hoặc service chuyên tạo ảnh theo yêu cầu và kết nối với AI chat
+
+Đổi sang port 8384 đi, và ngoài ra thì chú ý là tôi sẽ đẩy service này lên mạng cho nhiều người dùng. 
+
+Không phải, ý tôi server vẫn chạy 8383
+Còn dịch vụ về image thì ở port 8384 (nếu cần)
+
+ChatGPT có thể lưu lịch sử chat nếu có đăng nhập, có thể tiếp tục câu chuyện hoặc nhớ một số trao đổi quan trọng trong quá khứ
+
+Click button tạo ảnh thì bị lỗi "Image generation is disabled. Set IMAGE_PROVIDER"
+
+Hãy giúp tôi cài phần mềm và chạy service tạo ảnh ở backend 8384
+Ảnh tạo ra chả đúng gì cả
+
+Làm sao để AI chat này đóng vai trò như 1 nhân vật cụ thể, nhớ được thông tin ngữ cảnh của nhân vật để từ đó trả lời phù hợp? Tôi không muốn AI chat này là cỗ máy vô hôn mà phải có tính cách, có trí nhớ 1 số thông tin nhất định về bản thân để cho việc trả lời "con người" nhất. Có thể điền vào persona không?
+Còn về tạo ảnh, tôi test xong rồi. Có vẻ như chạy thêm phần mềm tạo ảnh khiến cho phải offload ram nên tốc độ sinh token chậm hẳn, cho nên tắt service tạo ảnh đi và ghi hướng dẫn bật/tắt tính năng này trong file readme.md
+
+
+Kiểm tra lại. Tôi đặt câu hỏi "chú là ai" thì AI lại trả lời "Tôi không hiểu câu hỏi"
+Lẽ ra phải trả lời "Tôi la Duy, một kỹ sư phân mềm" chứ? Vì tôi đã điền trong persona như vậy
+
+Chưa đúng. Khi hỏi danh tính thì đang nói quá sâu về hoàn cảnh gia đình. Hỏi danh tính thì trả lời tên, nghề nghiệp, nơi ở thôi. Còn hỏi kỹ về gia cảnh mới trả lời tên vợ con và hoàn cảnh gia đình
+
+Chưa đúng. Nếu trả lời cho Tùng hoặc Giang, thì phải xưng bố và gọi con (vì đó là con mình). Phải nhớ tên người đang nói chuyện với mình trong nội dung chat. Hiện tại AI đang trả lời "Bạn có thêm câu hỏi gi không con?" là không đúng. Phải là "Con có thêm câu hỏi gì không?" chứ?
+
+Sắp tới, tôi sẽ làm 1 loa thông minh để chat với người dùng.
+Tôi muốn loa sẽ gọi đến API của server này làm 2 việc:
+1. Speech recognition (chuyển câu hỏi của user thành text)
+2. Đưa câu hỏi xuống AI Chat để nhận câu trả lời bằng text
+Trên loa, tôi sẽ dùng phần mềm để chuyển text thành giọng nói
+
+Về speech recognition thì tính sau. Tôi muốn loa gọi đến API của server để gửi câu trả lời cùng 1 ID của phiên làm việc. Trong cùng phiên làm việc này, AI Chat cần nhớ nội dung và trả lời theo nội dung đã trao đổi từ những hội thoại trước. Dĩ nhiên, vẫn phải đảm bảo đúng tính cách và thông tin nhân vật. Tôi sẽ đảm bảo để loa mỗi khi bật lên sẽ tạo ra 1 phiên làm việc với ID riêng. 
+
+Bạn cần ghi hướng dẫn vào file readme.md để sau này tôi còn dựa vào để code cho loa
+Ngoài ra, thì file readme.md hiện có quá nhiều nội dung. Cần tách ra nhiều file và mỗi fie 1 chủ đề
+
+Ngoài ra, tôi thấy AI Chat vẫn đang trả lời "Bạn có thêm câu hỏi gì không con?" Nhẽ ra phải là "Tùng có thêm câu hỏi gì không con?" hoặc "con có thêm câu hỏi gì không?" Nói chung là khi đã xác định được tên đối phương thì phải gọi theo tên.
+
+Vẫn đang đối đáp là "bạn có thêm câu hỏi gì không con?"
+
+
+Tôi có 1 loa đã gắn raspberry PI Zero 2W và re-speaker 
+Cần thêm thông tin gì hỏi tôi
+Hãy triển khai code cho raspberry PI này để làm edge device: 
+- Hotword "Loa ơi", loa sẽ trả lời "Có đây" rồi bắt đầu lắng nghe câu hỏi và xử lý sau khi nghe được hotword 
+- Lắng nghe câu hỏi sẽ thu âm lại rồi dùng speech recognition để chuyển thành text:
++ Option 1: cài phần mềm trên raspberry PI để speech recognition (viết hướng dẫn setup raspberry PI vào file md)
++ Option 2: thu âm rồi gửi cho máy này (đang cài wishper) để xử lý, rồi server tự xử lý thành text, tự trả lời rồi gửi câu trả lời dạng text cho raspberry PI
+
+
+Tôi muốn có nhiều nhân vật, (persona) trên hệ thống trả lời thay vì fix cố đinh cho AI Chat web và AI voice chat.
+Tôi có thể setting bằng quyền admin xem hệ thống nào dùng nhân vật nào
+Với mỗi nhân vật, tôi muốn có thể giao tiếp qua AI chat cả web và voice chat một cách có tính cách, ký ức mà tôi có thể nạp vào riêng cho từng nhân vật bằng cách nạp hình ảnh, nội dung nhật ký, ghi chú mô tả ... để từ đó nhân vật có thể trả lời như thể chính bản thân là đối tượng đó. Mục đích là tôi sẽ tạo ra bản sao của chính mình để có thể giao tiếp như thật 
+- Raspberry PI chuyển câu trả lời thành voice và phát ra loa
+
+Chú ý: thư mục code cho raspberry PI là speaker_app 
+nhớ phải ghi hết hướng dẫn setup trên raspberry PI vào file md mới. Tôi đã flash sẵn raspberry PI OS rồi
+
+Tôi muốn tách persona của Web AI Chat và Voice chat.
+Khi voice chat với session_id thì cần phải trả lời theo 1 luồng tính cách nhân vật và thông tin nhân vật khác
+Cả 2 persona này đều có thể setting trong giao diện admin của Web AI Chat (account admin có thể setting)
+Ngoài ra, persona này dài khoảng bao nhiêu là tối đa mà không gây ảnh hưởng đến performance hoặc gây thiếu vram?

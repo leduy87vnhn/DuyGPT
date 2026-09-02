@@ -1,0 +1,17 @@
+.module-nav{position:sticky;top:0;z-index:50;display:flex;gap:6px;overflow-x:auto;padding:9px 14px;background:#111214;border-bottom:1px solid #343842}
+.module-nav a{white-space:nowrap;color:#a8adb8;text-decoration:none;padding:8px 11px;border-radius:7px;font-weight:650}
+.module-nav a:hover,.module-nav a.active{background:#243229;color:#f4f0e8}
+body>.shell{height:calc(100vh - 59px);height:calc(100dvh - 59px)}
+body>.shell .chat,body>.shell .crm-main{min-height:0}
+.module-settings{display:none!important}
+.work-moved{display:none!important}
+.module-tabs{display:flex;justify-content:flex-start;gap:8px;padding:9px 14px;background:#191b1f;border-bottom:1px solid #343842;overflow-x:auto;-webkit-overflow-scrolling:touch}.module-tabs a{flex-shrink:0;white-space:nowrap;color:#a8adb8;text-decoration:none;padding:7px 18px;border-radius:7px}.module-tabs a.active{color:#f4f0e8;background:#243229}.module-content-hidden{display:none!important}.module-settings-page{margin-top:32px}
+.fab-add{position:fixed;right:24px;bottom:24px;z-index:60;width:56px;height:56px;border-radius:50%;background:#243229;color:#f4f0e8;border:none;font-size:28px;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center}
+.fab-add:hover{background:#2d3d33}
+.add-choice-popup{position:fixed;right:24px;bottom:90px;z-index:60;background:#191b1f;border:1px solid #343842;border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:4px;min-width:170px;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+.add-choice-popup button{background:none;border:none;color:#a8adb8;text-align:left;padding:9px 12px;border-radius:7px;cursor:pointer;font-size:14px}
+.add-choice-popup button:hover{background:#243229;color:#f4f0e8}
+.modal-overlay{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px}
+.modal-box{position:relative;background:#191b1f;border:1px solid #343842;border-radius:12px;padding:22px;width:min(420px,100%);max-height:85vh;overflow-y:auto}
+.modal-close{position:absolute;top:8px;right:10px;background:none;border:none;color:#a8adb8;font-size:22px;line-height:1;cursor:pointer}
+.modal-close:hover{color:#f4f0e8}

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cài đặt chung · DuyGPT</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/module-nav.css"></head>
+<body><main class="standalone"><form id="commonSettingsForm" class="panel account-card"><h1>Cài đặt chung</h1><p class="muted-note">Cấu hình nền được tất cả module sử dụng. Tab cài đặt trong từng module có thể ghi đè các giá trị này.</p>
+<label>Provider<select id="provider"><option value="ollama">Ollama</option><option value="openai">OpenAI-compatible</option></select></label>
+<label>Mô hình LLM<div class="quick-form"><select id="model"></select><button id="reloadModels" type="button" class="secondary">Tải danh sách</button></div></label>
+<label>Ollama URL<input id="ollama_url" placeholder="http://127.0.0.1:11434"></label>
+<label>OpenAI-compatible URL<input id="openai_base_url" placeholder="http://127.0.0.1:8000/v1"></label>
+<label>Temperature<input id="temperature" type="number" min="0" max="2" step="0.1"></label>
+<label>Chế độ suy luận (thinking)<select id="ollama_think"><option value="false">Tắt (mặc định, nhanh hơn)</option><option value="true">Bật (chậm hơn, suy luận sâu hơn)</option></select><p class="muted-note">Model sinh thêm một bước suy luận ẩn trước khi trả lời. Tắt giúp phản hồi nhanh hơn nhiều, đặc biệt với Trợ lý gia đình/Công việc/CRM (gọi model nhiều lần/lượt). Có thể ghi đè riêng ở tab Cài đặt của từng module.</p></label>
+<button type="submit">Lưu cài đặt chung</button><p id="result" class="muted-note"></p></form>
+<form id="featureFlagsForm" class="panel account-card hidden">
+<h1>Tính năng cho user thường</h1>
+<p class="muted-note">Chọn những module/tính năng hiển thị cho tài khoản không phải admin. Admin luôn thấy đầy đủ mọi thứ.</p>
+<label class="checkbox-line"><input id="flag_home" type="checkbox" /> Trợ lý gia đình (/home)</label>
+<label class="checkbox-line"><input id="flag_work" type="checkbox" /> Trợ lý công việc (/work)</label>
+<label class="checkbox-line"><input id="flag_crm" type="checkbox" /> Quản lý khách hàng (/crm)</label>
+<label class="checkbox-line"><input id="flag_image_generation" type="checkbox" /> Tạo ảnh (trong ChatGPT)</label>
+<button type="submit">Lưu tính năng</button><p id="featureFlagsResult" class="muted-note"></p>
+</form>
+</main><script src="/module-nav.js"></script><script src="/settings.js"></script></body></html>

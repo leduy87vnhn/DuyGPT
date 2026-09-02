@@ -1,0 +1,9 @@
+psycopg[binary,pool]
+pypdf
+python-docx
+python-pptx
+openpyxl
+faster-whisper
+edge-tts
+nvidia-cublas-cu12
+nvidia-cudnn-cu12

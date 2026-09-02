@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.DS_Store
+*.log
+web/generated/
+certs/
+wg0.conf
+.claude/

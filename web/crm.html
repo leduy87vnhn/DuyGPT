@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quản Lý Yêu Cầu Khách Hàng</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/home.css" />
+    <link rel="stylesheet" href="/crm.css" />
+    <link rel="stylesheet" href="/module-nav.css" />
+  </head>
+  <body>
+    <main class="shell crm-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="mark">C</div>
+          <div>
+            <h1>Quản Lý YCKH</h1>
+            <p id="status">Đang kết nối...</p>
+          </div>
+        </div>
+
+        <div id="notAdminNotice" class="panel hidden">
+          <p class="muted-note">Bạn chưa có quyền truy cập CRM. Liên hệ admin để được cấp quyền (trang "Quản lý người dùng").</p>
+        </div>
+
+        <div id="featureDisabledNotice" class="panel hidden">
+          <p class="muted-note">Tính năng CRM hiện đang được quản trị viên tắt.</p>
+        </div>
+
+        <section id="contextPanel" class="panel hidden">
+          <div class="panel-title" title="Thêm/sửa/xóa khách hàng và sản phẩm ở tab &quot;Khách hàng&quot; và &quot;Sản phẩm&quot;.">Đang làm việc với</div>
+          <div class="context-fields">
+            <div class="context-field">
+              <label class="field-label" for="customerSelect">Khách hàng</label>
+              <select id="customerSelect"></select>
+            </div>
+            <div class="context-field">
+              <label class="field-label" for="productSelect">Sản phẩm</label>
+              <select id="productSelect"></select>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <section id="crmMain" class="crm-main">
+        <div id="noSelectionNotice" class="empty hidden">Chọn (hoặc thêm ở tab "Khách hàng" / "Sản phẩm") khách hàng và sản phẩm để bắt đầu.</div>
+
+        <div id="tab-tuvan" class="crm-workspace crm-tab hidden">
+          <section class="panel">
+            <div class="panel-title">Tư vấn AI</div>
+            <div id="messages" class="messages crm-messages"></div>
+            <form id="composer" class="composer home-composer">
+              <div class="prompt-box">
+                <textarea id="prompt" rows="1" placeholder="Hỏi trợ lý về hiện trạng, yêu cầu, hoặc xin đề xuất..."></textarea>
+              </div>
+              <div class="composer-actions">
+                <div id="voiceStatus" class="voice-status" aria-live="polite"></div>
+                <button id="record" class="icon-button" type="button" aria-label="Start recording" title="Start recording">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"></path>
+                    <path d="M19 11a7 7 0 0 1-14 0"></path>
+                    <path d="M12 18v3"></path>
+                    <path d="M8 21h8"></path>
+                  </svg>
+                </button>
+                <button id="send" class="icon-button" type="submit" aria-label="Gửi" title="Gửi">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m22 2-7 20-4-9-9-4Z"></path>
+                    <path d="M22 2 11 13"></path>
+                  </svg>
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+
+        <div id="tab-hientrang" class="crm-workspace crm-tab hidden">
+          <section class="panel">
+            <div class="panel-title">Hiện trạng &amp; Yêu cầu</div>
+            <form id="requirementForm" class="crm-form">
+              <label class="field-label" for="currentStateInput">Hiện trạng</label>
+              <textarea id="currentStateInput" rows="3" placeholder="Hiện trạng nghiệp vụ của khách hàng..."></textarea>
+              <label class="field-label" for="requirementInput">Yêu cầu</label>
+              <textarea id="requirementInput" rows="3" placeholder="Yêu cầu nghiệp vụ của khách hàng..."></textarea>
+              <button type="submit">Thêm mục ghi nhận</button>
+            </form>
+            <div id="requirementList" class="crm-list"></div>
+          </section>
+        </div>
+
+        <div id="tab-tailieu" class="crm-workspace crm-tab hidden">
+          <section class="panel">
+            <div class="panel-title">Tài liệu (Memo / Đề án)</div>
+            <form id="documentForm" class="crm-form">
+              <label class="field-label" for="documentTitleInput">Tiêu đề (dùng để nhận diện phiên bản khi update)</label>
+              <input id="documentTitleInput" placeholder="VD: Memo khảo sát hiện trạng kho" required />
+              <label class="field-label" for="documentTypeInput">Loại</label>
+              <select id="documentTypeInput">
+                <option value="memo">Memo</option>
+                <option value="proposal_file">File đề án</option>
+                <option value="other">Khác</option>
+              </select>
+              <input id="documentFileInput" type="file" accept=".txt,.md,.pdf,.docx,.pptx,.xlsx" required />
+              <button type="submit">Upload</button>
+              <p class="auth-error" id="documentError"></p>
+            </form>
+            <label class="checkbox-line">
+              <input type="checkbox" id="documentShowAllVersions" />
+              Hiện tất cả phiên bản
+            </label>
+            <div id="documentList" class="crm-list"></div>
+          </section>
+        </div>
+
+        <div id="tab-dexuat" class="crm-workspace crm-tab hidden">
+          <section class="panel">
+            <div class="panel-title">Đề xuất</div>
+            <form id="proposalForm" class="crm-form">
+              <label class="field-label" for="proposalTitleInput">Tiêu đề đề xuất</label>
+              <input id="proposalTitleInput" placeholder="VD: Phương án triển khai giai đoạn 1" />
+              <label class="field-label" for="proposalContentInput">Nội dung</label>
+              <textarea id="proposalContentInput" rows="5" placeholder="Nội dung đề xuất..."></textarea>
+              <button type="submit">Lưu bản nháp</button>
+            </form>
+            <div id="proposalList" class="crm-list"></div>
+          </section>
+        </div>
+
+        <div id="tab-khachhang" class="crm-workspace crm-tab hidden">
+          <section class="panel">
+            <div class="panel-title">Khách hàng</div>
+            <form id="customerForm" class="crm-form">
+              <input id="customerNameInput" placeholder="Tên khách hàng mới" required />
+              <button type="submit">Thêm khách hàng</button>
+            </form>
+            <div id="customerList" class="crm-list"></div>
+          </section>
+        </div>
+
+        <div id="tab-sanpham" class="crm-workspace crm-tab hidden">
+          <section class="panel">
+            <div class="panel-title">Sản phẩm</div>
+            <form id="productForm" class="crm-form">
+              <input id="productNameInput" placeholder="Tên sản phẩm mới" required />
+              <button type="submit">Thêm sản phẩm</button>
+            </form>
+            <div id="productList" class="crm-list"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+    <script src="/module-nav.js"></script><script src="/voice-input.js"></script><script src="/crm.js"></script>
+  </body>
+</html>

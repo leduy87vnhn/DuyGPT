@@ -1,0 +1,19 @@
+.quick-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.quantity-input {
+  grid-column: 1 / -1;
+  max-width: 90px;
+}
+
+button.small {
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.message.assistant .role {
+  color: var(--accent);
+}

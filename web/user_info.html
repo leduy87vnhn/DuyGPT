@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI User Info</title>
+    <link rel="stylesheet" href="/user_info.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="form-panel">
+        <div class="heading">
+          <p class="eyebrow">AI nhập liệu</p>
+          <h1>Thông tin user</h1>
+        </div>
+
+        <form class="user-form">
+          <label>
+            Họ và tên
+            <input id="fullName" autocomplete="name" />
+          </label>
+
+          <label>
+            Địa chỉ
+            <input id="address" autocomplete="street-address" />
+          </label>
+
+          <label>
+            Số điện thoại
+            <input id="phone" autocomplete="tel" inputmode="tel" />
+          </label>
+        </form>
+
+        <div class="actions">
+          <button id="record" type="button" class="record-button" aria-label="Bắt đầu ghi âm">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"></path>
+              <path d="M19 11a7 7 0 0 1-14 0"></path>
+              <path d="M12 18v3"></path>
+              <path d="M8 21h8"></path>
+            </svg>
+            <span>Ghi âm</span>
+          </button>
+          <button id="clear" type="button" class="secondary">Xóa</button>
+        </div>
+
+        <p id="status" class="status" aria-live="polite"></p>
+        <p id="transcript" class="transcript"></p>
+      </section>
+    </main>
+
+    <script src="/user_info.js"></script>
+  </body>
+</html>

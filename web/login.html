@@ -1,0 +1,6 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Đăng nhập · DuyGPT</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/module-nav.css"></head>
+<body><main class="standalone"><section class="panel account-card"><h1>Tài khoản</h1><p class="muted-note" id="accountState">Đang kiểm tra...</p>
+<div class="tabs" id="authTabs"><button type="button" id="tabLogin" class="tab active">Đăng nhập</button><button type="button" id="tabRegister" class="tab">Đăng ký</button></div>
+<form id="loginForm" class="auth-form"><input id="username" autocomplete="username" placeholder="Tên đăng nhập" required><input id="password" type="password" autocomplete="current-password" placeholder="Mật khẩu" required><button>Đăng nhập</button></form>
+<form id="registerForm" class="auth-form hidden"><input id="regUsername" autocomplete="username" placeholder="Tên đăng nhập (tối thiểu 3 ký tự)" required><input id="regPassword" type="password" autocomplete="new-password" placeholder="Mật khẩu (tối thiểu 6 ký tự)" required><button>Tạo tài khoản</button></form>
+<button id="logout" class="secondary hidden">Đăng xuất</button><p id="error" class="auth-error"></p></section></main><script src="/module-nav.js"></script><script src="/login.js"></script></body></html>
