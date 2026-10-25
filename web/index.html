@@ -86,50 +86,6 @@
           </div>
         </section>
 
-        <section id="personaPanel" class="panel hidden module-settings">
-          <button type="button" class="panel-header" id="personaToggle" aria-expanded="true" aria-controls="personaBody">
-            <span class="panel-title">Personas</span>
-            <span class="chevron">&#9662;</span>
-          </button>
-          <div id="personaBody" class="panel-body">
-            <form id="activePersonaForm" class="auth-form">
-              <label class="field-label" for="activeWebPersona">Web AI Chat uses</label>
-              <select id="activeWebPersona"></select>
-              <label class="field-label" for="activeVoicePersona">Voice Chat uses</label>
-              <select id="activeVoicePersona"></select>
-              <button type="submit">Apply active personas</button>
-            </form>
-
-            <div class="persona-toolbar">
-              <select id="personaSelect" aria-label="Select persona"></select>
-              <button type="button" id="newPersonaBtn" class="secondary">New</button>
-              <button type="button" id="deletePersonaBtn" class="secondary">Delete</button>
-            </div>
-
-            <form id="personaForm" class="auth-form">
-              <label class="field-label" for="personaNameInput">Persona name</label>
-              <input id="personaNameInput" placeholder="VD: Duy bản sao, DuyGPT, Trợ lý gia đình..." />
-              <label class="field-label" for="personaDescriptionInput">Short description</label>
-              <input id="personaDescriptionInput" placeholder="Ghi chú ngắn để admin dễ phân biệt" />
-              <label class="field-label" for="webPersonaInput">Web AI Chat prompt</label>
-              <textarea id="webPersonaInput" placeholder="Tính cách, danh tính, cách nói chuyện, ký ức nền, giới hạn..." rows="10"></textarea>
-              <label class="field-label" for="voicePersonaInput">Voice Chat prompt</label>
-              <textarea id="voicePersonaInput" placeholder="Bản prompt ngắn hơn, tự nhiên hơn để đọc thành tiếng..." rows="10"></textarea>
-              <button type="submit">Save selected persona</button>
-            </form>
-
-            <form id="personaMemoryForm" class="auth-form">
-              <label class="field-label" for="personaMemoryInput">Add persona memory</label>
-              <textarea id="personaMemoryInput" placeholder="Nhật ký, ghi chú mô tả, ký ức về bản thân nhân vật, cách xưng hô, sự kiện đời sống..." rows="5"></textarea>
-              <input id="personaMemoryFile" type="file" accept=".txt,.md,.pdf,image/*" />
-              <button type="submit">Add memory</button>
-              <div id="personaMemoryList" class="history-list"></div>
-              <p class="auth-error" id="personaError"></p>
-              <p class="muted-note" id="personaStatus"></p>
-            </form>
-          </div>
-        </section>
-
         <section id="adminPanel" class="panel hidden module-settings">
           <button type="button" class="panel-header" id="adminToggle" aria-expanded="true" aria-controls="adminBody">
             <span class="panel-title">Documents (RAG)</span>

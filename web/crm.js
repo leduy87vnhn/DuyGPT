@@ -129,6 +129,55 @@ async function loadCustomers(preselectId) {
   renderTab();
 }
 
+function canEditCustomer(customerId = state.selectedCustomerId) {
+  return state.customers.some(customer => customer.id === customerId && customer.is_owner === true);
+}
+
+function updateCustomerPermissions() {
+  const editable = canEditCustomer();
+  for (const form of [els.requirementForm, els.documentForm, els.proposalForm]) {
+    form.classList.toggle('hidden', !editable);
+  }
+}
+
+async function showCustomerSharing(customer) {
+  const dialog = document.createElement('dialog');
+  dialog.className = 'crm-share-dialog';
+  const heading = document.createElement('h3'); heading.textContent = `Share — ${customer.name}`;
+  const note = document.createElement('p');
+  note.textContent = 'Chọn người được xem tài liệu, requirement và chat về khách hàng này. Bỏ tick để thu hồi quyền. Chỉ người tạo được sửa dữ liệu.';
+  const list = document.createElement('div'); list.className = 'crm-share-users';
+  const error = document.createElement('p'); error.className = 'auth-error'; error.setAttribute('role', 'status');
+  const actions = document.createElement('div'); actions.className = 'crm-item-actions';
+  const save = document.createElement('button'); save.type = 'button'; save.textContent = 'Lưu chia sẻ'; save.disabled = true;
+  const close = document.createElement('button'); close.type = 'button'; close.className = 'secondary'; close.textContent = 'Đóng';
+  close.addEventListener('click', () => dialog.close());
+  dialog.addEventListener('close', () => dialog.remove());
+  actions.append(save, close); dialog.append(heading, note, list, error, actions);
+  document.body.append(dialog); dialog.showModal();
+  try {
+    const data = await crmRequest(`/api/crm/customers/${customer.id}/shares`);
+    for (const user of data.users) {
+      const label = document.createElement('label'); label.className = 'checkbox-line';
+      const input = document.createElement('input'); input.type = 'checkbox'; input.value = String(user.id); input.checked = user.shared;
+      label.append(input, document.createTextNode(user.username)); list.append(label);
+    }
+    if (!data.users.length) list.textContent = 'Chưa có người dùng khác được cấp quyền CRM.';
+    save.disabled = false;
+    save.addEventListener('click', async () => {
+      save.disabled = true; error.textContent = '';
+      try {
+        await crmRequest(`/api/crm/customers/${customer.id}/shares`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_ids: [...list.querySelectorAll('input:checked')].map(input => Number(input.value)) }),
+        });
+        dialog.close();
+      } catch (failure) { error.textContent = failure.message; }
+      finally { save.disabled = false; }
+    });
+  } catch (failure) { error.textContent = failure.message; }
+}
+
 function renderCustomerList() {
   if (!state.customers.length) {
     els.customerList.innerHTML = '<p class="muted-note">Chưa có khách hàng nào.</p>';
@@ -154,12 +203,21 @@ function renderCustomerList() {
         if (state.selectedCustomerId === customer.id) state.selectedCustomerId = null;
         await loadCustomers();
       });
-      header.append(title, del);
+      header.append(title);
+      if (customer.is_owner) {
+        const share = document.createElement('button'); share.type = 'button'; share.className = 'secondary small';
+        share.textContent = 'Share'; share.addEventListener('click', () => showCustomerSharing(customer));
+        header.append(share, del);
+      } else {
+        const badge = document.createElement('span'); badge.className = 'crm-item-meta'; badge.textContent = 'Được chia sẻ · Chỉ xem';
+        header.append(badge);
+      }
 
       const notes = document.createElement("textarea");
       notes.rows = 2;
       notes.placeholder = "Ghi chú khách hàng...";
       notes.value = customer.notes || "";
+      notes.readOnly = !customer.is_owner;
       const save = document.createElement("button");
       save.type = "button";
       save.className = "secondary small";
@@ -173,7 +231,8 @@ function renderCustomerList() {
         await loadCustomers();
       });
 
-      item.append(header, notes, save);
+      item.append(header, notes);
+      if (customer.is_owner) item.append(save);
       return item;
     })
   );
@@ -239,7 +298,8 @@ function renderProductList() {
       del.textContent = "Xóa";
       del.addEventListener("click", async () => {
         if (!confirm(`Xóa sản phẩm "${product.name}" và toàn bộ dữ liệu liên quan?`)) return;
-        await fetch(`/api/crm/products/${product.id}`, { method: "DELETE" });
+        try { await crmRequest(`/api/crm/products/${product.id}`, { method: "DELETE" }); }
+        catch (error) { alert(error.message); return; }
         if (state.selectedProductId === product.id) state.selectedProductId = null;
         await loadProducts();
       });
@@ -274,7 +334,9 @@ els.productForm.addEventListener("submit", async (event) => {
 // --- Selection ---
 
 function onSelectionChange() {
+  updateCustomerPermissions();
   renderTab();
+  document.querySelector("#documentViewer")?.remove();
   if (!state.selectedCustomerId || !state.selectedProductId) return;
   state.messages = [];
   state.conversationId = null;
@@ -292,14 +354,47 @@ async function loadRequirements() {
   );
   const data = await response.json();
   renderRequirements(data.requirements || []);
+  const docsResponse = await fetch(`/api/crm/documents?customer_id=${state.selectedCustomerId}&product_id=${state.selectedProductId}`);
+  const docs = await docsResponse.json();
+  const pending = (docs.documents || []).filter(d => d.analysis_status !== 'ready');
+  document.querySelector('#requirementAnalysisNotice').textContent = pending.length
+    ? `${pending.length} tài liệu mới nhất chưa phân tích xong. Mở Tài liệu để phân tích / thử lại; danh sách dưới đây chưa đầy đủ.` : '';
 }
 
-function renderRequirements(requirements) {
+async function refreshRequirementViews(documentId) {
+  await loadRequirements();
+  const viewer = document.querySelector('#documentViewer');
+  if (viewer && Number(viewer.dataset.documentId) === documentId) {
+    await openDocument(documentId, 'requirements');
+  }
+}
+
+function deleteAllRequirementsButton(doc) {
+  const button = document.createElement('button');
+  button.type = 'button'; button.className = 'secondary small';
+  button.title = 'Xóa tất cả requirement của phiên bản này';
+  button.setAttribute('aria-label', `Xóa tất cả requirement: ${doc.title}, phiên bản ${doc.version}`);
+  button.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
+  button.append(document.createTextNode(' Xóa tất cả requirement'));
+  button.addEventListener('click', async () => {
+    if (!confirm(`Xóa toàn bộ requirement của "${doc.title}" — phiên bản ${doc.version}? File gốc vẫn được giữ lại.`)) return;
+    button.disabled = true;
+    try {
+      await crmRequest(`/api/crm/documents/${doc.id}/requirements`, { method: 'DELETE' });
+      await refreshRequirementViews(doc.id);
+      if (!document.querySelector('#documentViewer')) await openDocument(doc.id, 'requirements');
+    } catch (error) { alert(error.message); }
+    finally { button.disabled = false; }
+  });
+  return button;
+}
+
+function renderRequirements(requirements, target = els.requirementList) {
   if (!requirements.length) {
-    els.requirementList.innerHTML = '<p class="muted-note">Chưa có mục ghi nhận nào.</p>';
+    target.innerHTML = '<p class="muted-note">Chưa có mục ghi nhận nào.</p>';
     return;
   }
-  els.requirementList.replaceChildren(
+  target.replaceChildren(
     ...requirements.map((r) => {
       const item = document.createElement("div");
       item.className = "crm-item";
@@ -313,11 +408,42 @@ function renderRequirements(requirements) {
       del.type = "button";
       del.className = "secondary small";
       del.textContent = "Xóa";
-      del.addEventListener("click", async () => {
-        await fetch(`/api/crm/requirements/${r.id}`, { method: "DELETE" });
-        loadRequirements();
+      del.addEventListener('click', async () => {
+        if (!confirm('Xóa requirement này khỏi danh sách?')) return;
+        del.disabled = true;
+        try {
+          await crmRequest(r.document_id ? `/api/crm/document-requirements/${r.id}` : `/api/crm/requirements/${r.id}`, { method: 'DELETE' });
+          await refreshRequirementViews(r.document_id);
+        } catch (error) { alert(error.message); }
+        finally { del.disabled = false; }
       });
-      header.append(meta, del);
+      header.append(meta);
+      if (r.document_id) {
+        meta.textContent = `${r.document_title} · phiên bản ${r.version}`;
+        const label = document.createElement('label'); label.className = 'requirement-status';
+        label.append(document.createTextNode('Trạng thái '));
+        const select = document.createElement('select');
+        select.setAttribute('aria-label', `Trạng thái: ${r.requirement}`);
+        for (const [value, text] of [['todo', 'To Do'], ['progress', 'Progress'], ['done', 'Done'], ['rejected', 'Rejected']]) {
+          select.append(new Option(text, value));
+        }
+        r.status = r.status || (r.completed ? 'done' : 'todo');
+        select.value = r.status;
+        select.disabled = !canEditCustomer();
+        select.addEventListener('change', async () => {
+          select.disabled = true;
+          try {
+            const result = await crmRequest(`/api/crm/document-requirements/${r.id}`, {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: select.value }),
+            });
+            r.status = result.status; r.completed = result.completed;
+          } catch (error) { select.value = r.status; alert(error.message); }
+          finally { select.disabled = !canEditCustomer(); }
+        });
+        label.append(select); header.append(label);
+      }
+      if (canEditCustomer()) header.append(del);
 
       const body = document.createElement("div");
       body.className = "crm-item-body";
@@ -332,6 +458,52 @@ function renderRequirements(requirements) {
         body.append(reqEl);
       }
 
+      if (r.document_id) {
+        const targets = document.createElement('section'); targets.className = 'requirement-targets';
+        const heading = document.createElement('strong'); heading.textContent = 'Ngữ cảnh áp dụng';
+        targets.append(heading);
+        let known = false;
+        for (const [label, value] of [['Module', r.target_module], ['Màn hình', r.target_screen], ['File', r.target_file]]) {
+          if (!value) continue;
+          const line = document.createElement('div'); line.textContent = `${label}: ${value}`;
+          targets.append(line); known = true;
+        }
+        if (!known) {
+          const unknown = document.createElement('p'); unknown.className = 'muted-note';
+          unknown.textContent = 'Chưa xác định file / màn hình / module.'; targets.append(unknown);
+        }
+        if (r.target_evidence) {
+          const evidence = document.createElement('details');
+          const summary = document.createElement('summary'); summary.textContent = 'Căn cứ xác định ngữ cảnh';
+          const text = document.createElement('pre'); text.className = 'document-raw'; text.textContent = r.target_evidence;
+          evidence.append(summary, text); targets.append(evidence);
+        }
+        body.append(targets);
+      }
+      if (r.source_quote || r.source_context) {
+        const context = document.createElement('section'); context.className = 'requirement-context';
+        const heading = document.createElement('strong');
+        heading.textContent = r.context_start_line ? `Trích dẫn tài liệu · dòng ${r.context_start_line}–${r.context_end_line}` : 'Trích dẫn tài liệu';
+        const text = document.createElement('pre'); text.className = 'document-raw';
+        text.textContent = r.source_context || r.source_quote;
+        context.append(heading, text);
+        if (r.document_id) {
+          const full = document.createElement('details');
+          const summary = document.createElement('summary'); summary.textContent = 'Xem toàn bộ nội dung file';
+          const raw = document.createElement('pre'); raw.className = 'document-raw';
+          let loaded = false;
+          full.addEventListener('toggle', async () => {
+            if (!full.open || loaded) return;
+            raw.textContent = 'Đang tải…';
+            try {
+              const doc = await crmRequest(`/api/crm/documents/${r.document_id}`);
+              raw.textContent = doc.raw_text; loaded = true;
+            } catch (error) { raw.textContent = error.message; }
+          });
+          full.append(summary, raw); context.append(full);
+        }
+        body.append(context);
+      }
       item.append(header, body);
       return item;
     })
@@ -398,9 +570,20 @@ function renderDocuments(documents) {
       del.textContent = "Xóa";
       del.addEventListener("click", async () => {
         await fetch(`/api/crm/documents/${doc.id}`, { method: "DELETE" });
+        document.querySelector("#documentViewer")?.remove();
         loadDocuments();
+        loadRequirements();
       });
-      actions.append(del);
+      for (const [label, mode] of [['Xem nội dung raw', 'raw'], ['Danh sách requirement', 'requirements']]) {
+        const open = document.createElement('button');
+        open.type = 'button'; open.className = 'secondary small'; open.textContent = label;
+        open.addEventListener('click', () => openDocument(doc.id, mode));
+        actions.append(open);
+      }
+      if (canEditCustomer()) {
+        if (doc.analysis_status === 'ready') actions.append(deleteAllRequirementsButton(doc));
+        actions.append(del);
+      }
       header.append(title, actions);
 
       const meta = document.createElement("div");
@@ -409,7 +592,19 @@ function renderDocuments(documents) {
         doc.is_current ? "" : " (cũ)"
       } · ${doc.filename} · ${formatDate(doc.created_at)}`;
 
-      item.append(header, meta);
+      const analysis = document.createElement('p');
+      analysis.className = 'muted-note';
+      analysis.textContent = doc.analysis_status === 'ready' ? 'Đã phân tích yêu cầu' :
+        doc.analysis_status === 'failed' ? `Phân tích thất bại: ${doc.analysis_error}` : 'Chưa phân tích yêu cầu';
+      analysis.setAttribute('role', 'status');
+      if (canEditCustomer() && doc.analysis_status !== 'ready') {
+        const generate = document.createElement('button');
+        generate.type = 'button'; generate.className = 'small';
+        generate.textContent = 'Tạo danh sách Requirement';
+        generate.addEventListener('click', () => generateDocumentRequirements(doc.id, generate, analysis));
+        actions.prepend(generate);
+      }
+      item.append(header, meta, analysis);
       return item;
     })
   );
@@ -420,6 +615,9 @@ els.documentForm.addEventListener("submit", async (event) => {
   els.documentError.textContent = "";
   const file = els.documentFileInput.files[0];
   if (!file) return;
+  const submit = els.documentForm.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  els.documentError.textContent = 'Đang upload và phân tích yêu cầu bằng AI…';
   try {
     const contentBase64 = await readFileAsBase64(file);
     const response = await fetch("/api/crm/documents", {
@@ -437,11 +635,103 @@ els.documentForm.addEventListener("submit", async (event) => {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Upload thất bại");
     els.documentForm.reset();
+    els.documentError.textContent = data.analysis_status === 'failed'
+      ? `Đã lưu file. Phân tích chưa thành công: ${data.analysis_error}. Mở danh sách requirement để thử lại.`
+      : 'Đã lưu file và phân tích yêu cầu.';
     loadDocuments();
+    loadRequirements();
   } catch (error) {
     els.documentError.textContent = error.message;
-  }
+  } finally { submit.disabled = false; }
 });
+
+async function crmRequest(url, options) {
+  const response = await fetch(url, options);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Không thực hiện được yêu cầu');
+  return data;
+}
+
+async function generateDocumentRequirements(id, button, status) {
+  const customerId = state.selectedCustomerId;
+  const productId = state.selectedProductId;
+  const label = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Đang tạo…';
+  status.textContent = 'AI đang phân tích file và tạo danh sách Requirement… Thời gian chờ AI tối đa 30 phút mỗi lượt. Vui lòng giữ trang mở.';
+  try {
+    const result = await crmRequest(`/api/crm/documents/${id}/analyze`, { method: 'POST' });
+    if (customerId !== state.selectedCustomerId || productId !== state.selectedProductId) return;
+    if (result.analysis_status === 'running') {
+      status.textContent = 'File này đang được phân tích. Hãy mở lại danh sách sau khi hoàn tất.';
+    } else if (result.analysis_status === 'failed') {
+      status.textContent = `Chưa tạo được danh sách: ${result.analysis_error || 'Vui lòng thử lại.'}`;
+    } else if (result.analysis_status === 'ready') {
+      await openDocument(id, 'requirements');
+      await Promise.all([loadDocuments(), loadRequirements()]);
+    } else {
+      throw new Error('Chưa nhận được kết quả phân tích. Vui lòng thử lại.');
+    }
+  } catch (error) {
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = label;
+  }
+}
+
+async function openDocument(id, mode = 'raw') {
+  document.querySelector('#documentViewer')?.remove();
+  const viewer = document.createElement('section');
+  viewer.id = 'documentViewer'; viewer.className = 'panel';
+  viewer.dataset.documentId = String(id);
+  viewer.textContent = 'Đang tải…';
+  els.documentList.before(viewer);
+  try {
+    const doc = await crmRequest(`/api/crm/documents/${id}`);
+    if (!viewer.isConnected) return;
+    viewer.replaceChildren();
+    const heading = document.createElement('h3');
+    heading.textContent = `${doc.title} — phiên bản ${doc.version}`;
+    const actions = document.createElement('div'); actions.className = 'crm-item-actions';
+    for (const [label, nextMode] of [['Nội dung raw', 'raw'], ['Requirement', 'requirements']]) {
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'secondary small'; button.textContent = label;
+      button.addEventListener('click', () => openDocument(id, nextMode)); actions.append(button);
+    }
+    if (doc.has_original) {
+      const download = document.createElement('a');
+      download.href = `/api/crm/documents/${id}/download`; download.textContent = 'Tải file gốc';
+      actions.append(download);
+    }
+    const close = document.createElement('button');
+    close.type = 'button'; close.className = 'secondary small'; close.textContent = 'Đóng';
+    close.addEventListener('click', () => viewer.remove()); actions.append(close);
+    if (mode === 'requirements' && canEditCustomer() && doc.requirements.length) actions.append(deleteAllRequirementsButton(doc));
+    viewer.append(heading, actions);
+    if (mode === 'raw') {
+      const note = document.createElement('p');
+      note.textContent = doc.has_original ? 'Văn bản trích xuất từ file gốc:' :
+        'Phiên bản cũ chưa lưu file gốc. Dưới đây là các đoạn văn bản đã lưu, có thể có đoạn trùng nhau.';
+      const raw = document.createElement('pre'); raw.className = 'document-raw'; raw.textContent = doc.raw_text;
+      viewer.append(note, raw);
+    } else {
+      if (doc.analysis_status !== 'ready') {
+        const note = document.createElement('p');
+        note.textContent = doc.analysis_error || 'Phiên bản này chưa có danh sách yêu cầu được phân tích.';
+        const retry = document.createElement('button');
+        retry.type = 'button'; retry.textContent = 'Tạo danh sách Requirement';
+        retry.addEventListener('click', () => generateDocumentRequirements(id, retry, note));
+        viewer.append(note);
+        if (canEditCustomer()) viewer.append(retry);
+        else note.append(document.createTextNode(' Chủ sở hữu có thể chạy phân tích lại.'));
+      }
+      const list = document.createElement('div'); list.className = 'crm-list';
+      renderRequirements(doc.requirements, list); viewer.append(list);
+    }
+    viewer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (error) { viewer.textContent = error.message; }
+}
 
 // --- Proposals ---
 
@@ -627,7 +917,12 @@ function renderProposals(proposals) {
       });
       uploadRow.append(fileInput, uploadBtn, uploadError);
 
-      item.append(header, body, meta, attachmentList, uploadRow);
+      if (!canEditCustomer()) {
+        actions.replaceChildren();
+        attachmentList.querySelectorAll('button').forEach(button => button.remove());
+      }
+      item.append(header, body, meta, attachmentList);
+      if (canEditCustomer()) item.append(uploadRow);
       return item;
     })
   );
@@ -779,6 +1074,7 @@ async function init() {
   els.status.textContent = "Sẵn sàng";
   await loadProducts(getStoredId(STORAGE_PRODUCT_KEY));
   await loadCustomers(getStoredId(STORAGE_CUSTOMER_KEY));
+  onSelectionChange();
 }
 
 init();

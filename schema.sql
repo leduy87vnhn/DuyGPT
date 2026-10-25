@@ -186,10 +186,8 @@ CREATE TABLE IF NOT EXISTS home_calendar_events (
 CREATE INDEX IF NOT EXISTS home_calendar_events_user_time_idx
     ON home_calendar_events (user_id, start_at, end_at);
 
--- Customer requirement management module (CRM), admin-only.
--- Shared/global data on purpose: every admin sees and edits the same
--- customer/product catalog (and everything scoped under it). user_id is kept
--- only as "created by" metadata, never as an access-control filter.
+-- Customer requirement management. user_id owns each private customer.
+-- The product catalog is shared; customer data requires ownership or an explicit share.
 
 CREATE TABLE IF NOT EXISTS crm_customers (
     id SERIAL PRIMARY KEY,
@@ -336,3 +334,50 @@ CREATE TABLE IF NOT EXISTS work_tasks (
 
 CREATE INDEX IF NOT EXISTS work_tasks_user_idx
     ON work_tasks (user_id, done, due_at);
+
+-- Preserve each uploaded source and its independent requirement snapshot.
+ALTER TABLE crm_documents ADD COLUMN IF NOT EXISTS raw_content BYTEA;
+ALTER TABLE crm_documents ADD COLUMN IF NOT EXISTS extracted_text TEXT;
+ALTER TABLE crm_documents ADD COLUMN IF NOT EXISTS analysis_status TEXT NOT NULL DEFAULT 'pending';
+ALTER TABLE crm_documents ADD COLUMN IF NOT EXISTS analysis_error TEXT NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS crm_document_requirements (
+    id SERIAL PRIMARY KEY,
+    document_id INTEGER NOT NULL REFERENCES crm_documents(id) ON DELETE CASCADE,
+    requirement TEXT NOT NULL,
+    source_quote TEXT NOT NULL DEFAULT '',
+    completed BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS crm_document_requirements_document_idx
+    ON crm_document_requirements (document_id, id);
+
+-- Customer data is private to its creator unless explicitly shared for reading.
+CREATE TABLE IF NOT EXISTS crm_customer_shares (
+    customer_id INTEGER NOT NULL REFERENCES crm_customers(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (customer_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS crm_customer_shares_user_idx ON crm_customer_shares (user_id, customer_id);
+CREATE INDEX IF NOT EXISTS crm_customers_owner_idx ON crm_customers (user_id, id);
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS crm_customer_id INTEGER REFERENCES crm_customers(id) ON DELETE CASCADE;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS crm_product_id INTEGER REFERENCES crm_products(id) ON DELETE CASCADE;
+
+-- Initialize once from the former checkbox; repeated startup keeps selected statuses.
+ALTER TABLE crm_document_requirements ADD COLUMN IF NOT EXISTS status TEXT;
+UPDATE crm_document_requirements SET status = CASE WHEN completed THEN 'done' ELSE 'todo' END WHERE status IS NULL;
+ALTER TABLE crm_document_requirements ALTER COLUMN status SET DEFAULT 'todo';
+ALTER TABLE crm_document_requirements ALTER COLUMN status SET NOT NULL;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'crm_document_requirement_status_check'
+                   AND conrelid = 'crm_document_requirements'::regclass) THEN
+        ALTER TABLE crm_document_requirements ADD CONSTRAINT crm_document_requirement_status_check
+            CHECK (status IN ('todo', 'progress', 'done', 'rejected'));
+    END IF;
+END $$;
+
+-- Application targets identified by AI, distinct from the uploaded source document.
+ALTER TABLE crm_document_requirements ADD COLUMN IF NOT EXISTS target_file TEXT NOT NULL DEFAULT '';
+ALTER TABLE crm_document_requirements ADD COLUMN IF NOT EXISTS target_screen TEXT NOT NULL DEFAULT '';
+ALTER TABLE crm_document_requirements ADD COLUMN IF NOT EXISTS target_module TEXT NOT NULL DEFAULT '';
+ALTER TABLE crm_document_requirements ADD COLUMN IF NOT EXISTS target_evidence TEXT NOT NULL DEFAULT '';

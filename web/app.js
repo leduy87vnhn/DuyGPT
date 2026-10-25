@@ -11,8 +11,6 @@ const state = {
   disableRegistration: false,
   imageProvider: "disabled",
   featureFlags: {},
-  personas: [],
-  selectedPersonaId: null,
 };
 
 const els = {
@@ -53,26 +51,6 @@ const els = {
   historyPanel: document.querySelector("#historyPanel"),
   historyToggle: document.querySelector("#historyToggle"),
   historyList: document.querySelector("#historyList"),
-
-  personaPanel: document.querySelector("#personaPanel"),
-  personaToggle: document.querySelector("#personaToggle"),
-  activePersonaForm: document.querySelector("#activePersonaForm"),
-  activeWebPersona: document.querySelector("#activeWebPersona"),
-  activeVoicePersona: document.querySelector("#activeVoicePersona"),
-  personaSelect: document.querySelector("#personaSelect"),
-  newPersonaBtn: document.querySelector("#newPersonaBtn"),
-  deletePersonaBtn: document.querySelector("#deletePersonaBtn"),
-  personaForm: document.querySelector("#personaForm"),
-  personaNameInput: document.querySelector("#personaNameInput"),
-  personaDescriptionInput: document.querySelector("#personaDescriptionInput"),
-  webPersonaInput: document.querySelector("#webPersonaInput"),
-  voicePersonaInput: document.querySelector("#voicePersonaInput"),
-  personaMemoryForm: document.querySelector("#personaMemoryForm"),
-  personaMemoryInput: document.querySelector("#personaMemoryInput"),
-  personaMemoryFile: document.querySelector("#personaMemoryFile"),
-  personaMemoryList: document.querySelector("#personaMemoryList"),
-  personaError: document.querySelector("#personaError"),
-  personaStatus: document.querySelector("#personaStatus"),
 
   adminPanel: document.querySelector("#adminPanel"),
   adminToggle: document.querySelector("#adminToggle"),
@@ -136,7 +114,6 @@ function setupCollapsible(panel, toggle, storageKey, defaultCollapsed = false) {
 
 setupCollapsible(els.settingsPanel, els.settingsToggle, "duygpt_settings_collapsed");
 setupCollapsible(els.historyPanel, els.historyToggle, "duygpt_history_collapsed", true);
-setupCollapsible(els.personaPanel, els.personaToggle, "duygpt_persona_collapsed");
 setupCollapsible(els.adminPanel, els.adminToggle, "duygpt_admin_collapsed");
 
 function setBusy(value) {
@@ -228,7 +205,6 @@ function renderAuth() {
     setActiveTab("login");
   }
   els.historyPanel.classList.toggle("hidden", !authed);
-  els.personaPanel.classList.toggle("hidden", state.auth.user_type !== "admin_user");
   els.adminPanel.classList.toggle("hidden", state.auth.user_type !== "admin_user");
   if (authed) {
     els.userBadgeName.textContent = state.auth.username;
@@ -249,7 +225,6 @@ async function loadAuth() {
   if (state.auth.authenticated) {
     loadConversations();
     if (state.auth.user_type === "admin_user") {
-      loadPersona();
       loadDocuments();
     }
   }
@@ -609,246 +584,6 @@ async function transcribeRecording() {
     setBusy(false);
   }
 }
-
-// --- Persona (admin only) ---
-
-function selectedPersona() {
-  return state.personas.find((item) => item.id === state.selectedPersonaId) || state.personas[0] || null;
-}
-
-function fillPersonaSelect(select, personas) {
-  select.replaceChildren(
-    ...personas.map((item) => {
-      const option = document.createElement("option");
-      option.value = String(item.id);
-      option.textContent = item.name;
-      return option;
-    })
-  );
-}
-
-function renderPersonaEditor() {
-  fillPersonaSelect(els.personaSelect, state.personas);
-  fillPersonaSelect(els.activeWebPersona, state.personas);
-  fillPersonaSelect(els.activeVoicePersona, state.personas);
-  if (state.selectedPersonaId) els.personaSelect.value = String(state.selectedPersonaId);
-  const item = selectedPersona();
-  if (!item) {
-    els.personaNameInput.value = "";
-    els.personaDescriptionInput.value = "";
-    els.webPersonaInput.value = "";
-    els.voicePersonaInput.value = "";
-    els.deletePersonaBtn.disabled = true;
-    els.personaMemoryList.innerHTML = '<p class="muted-note">No persona selected.</p>';
-    return;
-  }
-  state.selectedPersonaId = item.id;
-  els.personaSelect.value = String(item.id);
-  els.personaNameInput.value = item.name || "";
-  els.personaDescriptionInput.value = item.description || "";
-  els.webPersonaInput.value = item.web_system_prompt || "";
-  els.voicePersonaInput.value = item.voice_system_prompt || "";
-  els.deletePersonaBtn.disabled = state.personas.length <= 1;
-}
-
-async function loadPersona() {
-  try {
-    const response = await fetch("/api/admin/personas");
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Failed to load persona");
-    state.personas = data.personas || [];
-    state.selectedPersonaId =
-      state.selectedPersonaId ||
-      data.active_web_persona_id ||
-      data.active_voice_persona_id ||
-      state.personas[0]?.id ||
-      null;
-    renderPersonaEditor();
-    if (data.active_web_persona_id) els.activeWebPersona.value = String(data.active_web_persona_id);
-    if (data.active_voice_persona_id) els.activeVoicePersona.value = String(data.active_voice_persona_id);
-    if (state.selectedPersonaId) loadPersonaMemories(state.selectedPersonaId);
-  } catch (error) {
-    els.personaError.textContent = error.message;
-  }
-}
-
-async function loadPersonaMemories(personaId) {
-  try {
-    const response = await fetch(`/api/admin/personas/${personaId}/memories`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Failed to load memories");
-    renderPersonaMemories(data.memories || []);
-  } catch (error) {
-    els.personaMemoryList.textContent = error.message;
-  }
-}
-
-function renderPersonaMemories(memories) {
-  if (memories.length === 0) {
-    els.personaMemoryList.innerHTML = '<p class="muted-note">No memories yet.</p>';
-    return;
-  }
-  els.personaMemoryList.replaceChildren(
-    ...memories.map((memory) => {
-      const row = document.createElement("div");
-      row.className = "memory-item";
-      const text = document.createElement("span");
-      const label = memory.filename ? `${memory.source_type}: ${memory.filename}` : memory.source_type;
-      text.textContent = `${label} - ${memory.content}`;
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "secondary";
-      remove.textContent = "Delete";
-      remove.addEventListener("click", async () => {
-        await fetch(`/api/admin/persona-memories/${memory.id}`, { method: "DELETE" });
-        loadPersonaMemories(state.selectedPersonaId);
-      });
-      row.append(text, remove);
-      return row;
-    })
-  );
-}
-
-els.activePersonaForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  els.personaError.textContent = "";
-  els.personaStatus.textContent = "";
-  try {
-    const response = await fetch("/api/admin/personas/active", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        web_persona_id: Number(els.activeWebPersona.value),
-        voice_persona_id: Number(els.activeVoicePersona.value),
-      }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Failed to apply active personas");
-    els.personaStatus.textContent = "Active personas applied.";
-    loadPersona();
-  } catch (error) {
-    els.personaError.textContent = error.message;
-  }
-});
-
-els.personaSelect.addEventListener("change", () => {
-  state.selectedPersonaId = Number(els.personaSelect.value);
-  renderPersonaEditor();
-  loadPersonaMemories(state.selectedPersonaId);
-});
-
-els.newPersonaBtn.addEventListener("click", async () => {
-  els.personaError.textContent = "";
-  els.personaStatus.textContent = "";
-  try {
-    const response = await fetch("/api/admin/personas", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Nhân vật mới" }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Failed to create persona");
-    state.selectedPersonaId = data.id;
-    els.personaStatus.textContent = "Created.";
-    loadPersona();
-  } catch (error) {
-    els.personaError.textContent = error.message;
-  }
-});
-
-els.deletePersonaBtn.addEventListener("click", async () => {
-  const item = selectedPersona();
-  if (!item || state.personas.length <= 1) return;
-  if (!window.confirm(`Delete persona "${item.name}"?`)) return;
-  els.personaError.textContent = "";
-  els.personaStatus.textContent = "";
-  try {
-    const response = await fetch(`/api/admin/personas/${item.id}`, { method: "DELETE" });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Failed to delete persona");
-    state.selectedPersonaId = null;
-    els.personaStatus.textContent = "Deleted.";
-    loadPersona();
-  } catch (error) {
-    els.personaError.textContent = error.message;
-  }
-});
-
-els.personaForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  els.personaError.textContent = "";
-  els.personaStatus.textContent = "";
-  const item = selectedPersona();
-  if (!item) return;
-  const name = els.personaNameInput.value.trim();
-  const webSystemPrompt = els.webPersonaInput.value.trim();
-  const voiceSystemPrompt = els.voicePersonaInput.value.trim();
-  if (!name) {
-    els.personaError.textContent = "name must not be empty";
-    return;
-  }
-  if (!webSystemPrompt) {
-    els.personaError.textContent = "web_system_prompt must not be empty";
-    return;
-  }
-  if (!voiceSystemPrompt) {
-    els.personaError.textContent = "voice_system_prompt must not be empty";
-    return;
-  }
-  try {
-    const response = await fetch(`/api/admin/personas/${item.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        description: els.personaDescriptionInput.value.trim(),
-        web_system_prompt: webSystemPrompt,
-        voice_system_prompt: voiceSystemPrompt,
-      }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Failed to save persona");
-    els.personaStatus.textContent = "Saved.";
-    loadPersona();
-  } catch (error) {
-    els.personaError.textContent = error.message;
-  }
-});
-
-els.personaMemoryForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  els.personaError.textContent = "";
-  els.personaStatus.textContent = "";
-  const item = selectedPersona();
-  if (!item) return;
-  const file = els.personaMemoryFile.files[0];
-  const note = els.personaMemoryInput.value.trim();
-  if (!file && !note) {
-    els.personaError.textContent = "memory note or file is required";
-    return;
-  }
-  const payload = { content: note, source_type: file ? "file" : "note" };
-  if (file) {
-    payload.filename = file.name;
-    payload.content_base64 = await readFileAsBase64(file);
-  }
-  try {
-    const response = await fetch(`/api/admin/personas/${item.id}/memories`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Failed to add memory");
-    els.personaMemoryInput.value = "";
-    els.personaMemoryFile.value = "";
-    els.personaStatus.textContent = "Memory added.";
-    loadPersona();
-    loadPersonaMemories(item.id);
-  } catch (error) {
-    els.personaError.textContent = error.message;
-  }
-});
 
 // --- Admin documents (RAG) ---
 

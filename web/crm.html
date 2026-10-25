@@ -85,6 +85,8 @@
               <textarea id="requirementInput" rows="3" placeholder="Yêu cầu nghiệp vụ của khách hàng..."></textarea>
               <button type="submit">Thêm mục ghi nhận</button>
             </form>
+            <p class="muted-note">Yêu cầu từ phiên bản mới nhất của mỗi tài liệu và các mục ghi nhận thủ công. Xem phiên bản cũ trong mục Tài liệu.</p>
+            <p id="requirementAnalysisNotice" class="muted-note"></p>
             <div id="requirementList" class="crm-list"></div>
           </section>
         </div>
@@ -93,8 +95,8 @@
           <section class="panel">
             <div class="panel-title">Tài liệu (Memo / Đề án)</div>
             <form id="documentForm" class="crm-form">
-              <label class="field-label" for="documentTitleInput">Tiêu đề (dùng để nhận diện phiên bản khi update)</label>
-              <input id="documentTitleInput" placeholder="VD: Memo khảo sát hiện trạng kho" required />
+              <label class="field-label" for="documentTitleInput">Tiêu đề (tùy chọn; file trùng tên sẽ tạo phiên bản mới)</label>
+              <input id="documentTitleInput" placeholder="VD: Memo khảo sát hiện trạng kho" />
               <label class="field-label" for="documentTypeInput">Loại</label>
               <select id="documentTypeInput">
                 <option value="memo">Memo</option>

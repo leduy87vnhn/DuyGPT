@@ -27,10 +27,15 @@ def chat_ollama(cfg, model, messages, tools):
     }
     if cfg.get("ollama_num_ctx"):
         payload["options"]["num_ctx"] = int(cfg["ollama_num_ctx"])
+    if cfg.get("response_schema"):
+        payload["format"] = cfg["response_schema"]
+        payload["options"]["temperature"] = 0
+    if cfg.get("llm_max_output_tokens"):
+        payload["options"]["num_predict"] = cfg["llm_max_output_tokens"]
     if tools:
         payload["tools"] = tools
-    data = http_json(f"{cfg['ollama_url']}/api/chat", payload)
-    return data.get("message") or {}
+    data = http_json(f"{cfg['ollama_url']}/api/chat", payload, timeout=cfg.get("llm_timeout_seconds", 180))
+    return {**(data.get("message") or {}), "finish_reason": data.get("done_reason")}
 
 
 def chat_openai(cfg, model, messages, tools):
@@ -41,11 +46,12 @@ def chat_openai(cfg, model, messages, tools):
     headers = {}
     if cfg.get("openai_api_key"):
         headers["Authorization"] = f"Bearer {cfg['openai_api_key']}"
-    data = http_json(f"{cfg['openai_base_url']}/chat/completions", payload, headers=headers)
+    data = http_json(f"{cfg['openai_base_url']}/chat/completions", payload, headers=headers,
+                     timeout=cfg.get("llm_timeout_seconds", 180))
     choices = data.get("choices") or []
     if not choices:
         return {}
-    return choices[0].get("message") or {}
+    return {**(choices[0].get("message") or {}), "finish_reason": choices[0].get("finish_reason")}
 
 
 def chat_with_tools(cfg, model, messages, tools):

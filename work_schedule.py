@@ -9,6 +9,7 @@ single business owner using the CRM module), not a per-family-member thing.
 from datetime import datetime
 import json
 import llm_tools
+import crm
 
 
 def parse_datetime(value):
@@ -45,13 +46,17 @@ def _entry_dict(row):
 
 
 _ENTRY_SELECT = (
-    "SELECT s.id, s.customer_id, c.name, s.title, s.location, s.start_at, s.end_at, "
+    "SELECT s.id, c.id, c.name, s.title, s.location, s.start_at, s.end_at, "
     "s.created_at, s.updated_at, s.done, s.completed_at "
-    "FROM work_schedule s LEFT JOIN crm_customers c ON c.id = s.customer_id"
+    "FROM work_schedule s LEFT JOIN crm_customers c ON c.id = s.customer_id "
+    "AND (c.user_id = s.user_id OR EXISTS (SELECT 1 FROM crm_customer_shares sh "
+    "WHERE sh.customer_id = c.id AND sh.user_id = s.user_id))"
 )
 
 
 def create_entry(pool, user_id, customer_id, title, location, start_at, end_at):
+    if customer_id and not crm.can_access_customer(pool, user_id, customer_id):
+        return {"error": "customer not found"}
     title = (title or "").strip()
     if not title:
         return {"error": "title is required"}
@@ -88,6 +93,8 @@ def list_entries(pool, user_id, start_from=None, start_to=None, limit=200):
 
 
 def update_entry(pool, user_id, entry_id, customer_id, title, location, start_at, end_at):
+    if customer_id and not crm.can_access_customer(pool, user_id, customer_id):
+        return {"error": "customer not found"}
     title = (title or "").strip()
     if not title:
         return {"error": "title is required"}

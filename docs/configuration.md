@@ -11,6 +11,8 @@ Main config lives in `.env`.
 | `SSL_CERT_FILE` / `SSL_KEY_FILE` | empty | Optional HTTPS certificate/key paths |
 | `HTTPS_HOST` / `HTTPS_PORT` | `HOST` / `8443` | Optional HTTPS listener |
 
+HTTP and HTTPS are served independently: opening an HTTP URL does not redirect to HTTPS. With the default ports, use `http://<host>:8383` or `https://<host>:8443` (when certificates are configured).
+
 ## Chat Model
 
 | Name | Default | Description |

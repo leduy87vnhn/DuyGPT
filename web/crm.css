@@ -159,3 +159,20 @@
     gap: 8px;
   }
 }
+
+.document-raw { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 60vh; overflow: auto; font: inherit; }
+#documentViewer { margin-bottom: 1rem; }
+
+.crm-share-dialog { max-width: min(560px, 90vw); max-height: 85vh; overflow: auto; padding: 24px; border: 1px solid #667085; border-radius: 12px; }
+.crm-share-dialog::backdrop { background: #0008; }
+.crm-share-users { display: grid; gap: 12px; margin: 20px 0; }
+
+.requirement-status { display: flex; align-items: center; gap: 8px; }
+.requirement-status select { width: auto; min-width: 115px; }
+.requirement-context { margin-top: 12px; padding: 12px; border-left: 3px solid #94a3b8; background: #94a3b815; }
+.requirement-context .document-raw { margin: 8px 0; max-height: 24rem; }
+.crm-item-actions button svg { vertical-align: middle; }
+
+.requirement-targets { margin-top: 12px; padding: 12px; border: 1px solid #94a3b855; border-radius: 8px; }
+.requirement-targets > div { margin-top: 6px; }
+.requirement-targets details { margin-top: 10px; }

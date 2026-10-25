@@ -899,31 +899,11 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_headers(204)
 
-    def is_secure(self):
-        return isinstance(self.connection, ssl.SSLSocket)
-
-    def maybe_redirect_to_https(self, path):
-        """Redirect plain-HTTP page requests to the HTTPS listener.
-
-        API calls (/api/...) are left on HTTP so existing HTTP-only clients
-        (e.g. the Raspberry Pi speaker_app using X-Device-Key) keep working.
-        """
-        if self.is_secure() or path.startswith("/api/"):
-            return False
-        cfg = config()
-        if not (cfg["ssl_cert_file"] and cfg["ssl_key_file"]):
-            return False
-        host = (self.headers.get("Host") or "").split(":", 1)[0] or self.client_address[0]
-        https_port = cfg["https_port"]
-        port_suffix = "" if https_port == 443 else f":{https_port}"
-        self.send_response(308)
-        self.send_header("Location", f"https://{host}{port_suffix}{self.path}")
-        self.end_headers()
-        return True
-
     def do_GET(self):
         path = self.path.split("?", 1)[0]
-        if self.maybe_redirect_to_https(path):
+        match = re.fullmatch(r"/api/crm/customers/(\d+)/shares", path)
+        if match:
+            self.handle_crm_customer_shares(int(match[1]), update=False)
             return
         if path == "/api/health":
             cfg = module_config(self.current_user(), "chatgpt")
@@ -971,6 +951,10 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/crm/requirements":
             self.handle_crm_list_requirements()
+            return
+        match = re.fullmatch(r"/api/crm/documents/(\d+)(/download)?", path)
+        if match:
+            self.handle_crm_get_document(int(match[1]), bool(match[2]))
             return
         if path == "/api/crm/documents":
             self.handle_crm_list_documents()
@@ -1042,8 +1026,6 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?", 1)[0]
-        if self.maybe_redirect_to_https(path):
-            return
         if path == "/api/chat":
             self.handle_chat()
             return
@@ -1114,6 +1096,10 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         if path == "/api/crm/requirements":
             self.handle_crm_add_requirement()
             return
+        match = re.fullmatch(r"/api/crm/documents/(\d+)/analyze", path)
+        if match:
+            self.handle_crm_analyze_document(int(match[1]))
+            return
         if path == "/api/crm/documents":
             self.handle_crm_upload_document()
             return
@@ -1140,7 +1126,13 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
 
     def do_PUT(self):
         path = self.path.split("?", 1)[0]
-        if self.maybe_redirect_to_https(path):
+        match = re.fullmatch(r"/api/crm/customers/(\d+)/shares", path)
+        if match:
+            self.handle_crm_customer_shares(int(match[1]), update=True)
+            return
+        match = re.fullmatch(r"/api/crm/document-requirements/(\d+)", path)
+        if match:
+            self.handle_crm_requirement_completed(int(match[1]))
             return
         if path == "/api/module-settings":
             self.handle_update_module_settings()
@@ -1207,7 +1199,13 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
 
     def do_DELETE(self):
         path = self.path.split("?", 1)[0]
-        if self.maybe_redirect_to_https(path):
+        match = re.fullmatch(r"/api/crm/documents/(\d+)/requirements", path)
+        if match:
+            self.handle_crm_delete_document_requirements(int(match[1]))
+            return
+        match = re.fullmatch(r"/api/crm/document-requirements/(\d+)", path)
+        if match:
+            self.handle_crm_delete_document_requirements(None, int(match[1]))
             return
         match = ADMIN_DOCUMENT_RE.match(path)
         if match:
@@ -1259,7 +1257,7 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
             return
         match = CRM_PROPOSAL_ATTACHMENT_RE.match(path)
         if match:
-            self.handle_crm_delete_proposal_attachment(int(match.group(2)))
+            self.handle_crm_delete_proposal_attachment(int(match.group(2)), int(match.group(1)))
             return
         match = SCHEDULE_ENTRY_RE.match(path)
         if match:
@@ -1304,7 +1302,14 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         self.wfile.write(target.read_bytes())
 
     def handle_models(self):
-        cfg = module_config(self.current_user(), "chatgpt")
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        module = (query.get("module") or [""])[0]
+        if module not in MODULE_SETTING_KEYS:
+            module = "chatgpt"
+        cfg = module_config(self.current_user(), module)
+        provider = (query.get("provider") or [""])[0]
+        if provider in ("ollama", "openai"):
+            cfg = {**cfg, "provider": provider}
         try:
             if cfg["provider"] == "ollama":
                 data = http_json(f"{cfg['ollama_url']}/api/tags")
@@ -1568,11 +1573,15 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
             return
         query_params = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
         kind = (query_params.get("kind", ["chat"])[0] or "chat").strip()
+        if kind == "crm" and not self.require_crm_access():
+            return
         with db.get_pool().connection() as conn:
             rows = conn.execute(
-                "SELECT id, title, created_at FROM conversations WHERE user_id = %s AND kind = %s "
-                "ORDER BY created_at DESC",
-                (user["id"], kind),
+                "SELECT v.id, v.title, v.created_at FROM conversations v WHERE v.user_id = %s AND v.kind = %s "
+                "AND (v.kind != 'crm' OR EXISTS (SELECT 1 FROM crm_customers c WHERE c.id = v.crm_customer_id "
+                "AND (c.user_id = %s OR EXISTS (SELECT 1 FROM crm_customer_shares s WHERE s.customer_id = c.id AND s.user_id = %s)))) "
+                "ORDER BY v.created_at DESC",
+                (user["id"], kind, user["id"], user["id"]),
             ).fetchall()
         self.write_json(
             {
@@ -1588,11 +1597,15 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
             return
         with db.get_pool().connection() as conn:
             owner = conn.execute(
-                "SELECT user_id FROM conversations WHERE id = %s", (conversation_id,)
+                "SELECT user_id, kind, crm_customer_id FROM conversations WHERE id = %s", (conversation_id,)
             ).fetchone()
-            if not owner or owner[0] != user["id"]:
-                self.write_json({"error": "not found"}, 404)
+        if not owner or owner[0] != user["id"]:
+            self.write_json({"error": "not found"}, 404)
+            return
+        if owner[1] == "crm":
+            if not self.require_crm_access() or not self.require_crm_resource(user, "customer", owner[2]):
                 return
+        with db.get_pool().connection() as conn:
             rows = conn.execute(
                 "SELECT role, content, created_at FROM messages WHERE conversation_id = %s "
                 "ORDER BY created_at ASC",
@@ -1607,21 +1620,25 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
             }
         )
 
-    def ensure_conversation(self, user, conversation_id, last_user_message, kind="chat"):
+    def ensure_conversation(self, user, conversation_id, last_user_message, kind="chat", crm_scope=None):
         pool = db.get_pool()
+        if kind == "crm" and (not crm_scope or not crm.can_access_customer(pool, user["id"], crm_scope[0])):
+            raise PermissionError("Customer access denied")
         with pool.connection() as conn:
             if conversation_id:
                 row = conn.execute(
-                    "SELECT id FROM conversations WHERE id = %s AND user_id = %s AND kind = %s",
-                    (conversation_id, user["id"], kind),
+                    "SELECT id FROM conversations WHERE id = %s AND user_id = %s AND kind = %s "
+                    "AND crm_customer_id IS NOT DISTINCT FROM %s AND crm_product_id IS NOT DISTINCT FROM %s",
+                    (conversation_id, user["id"], kind, *(crm_scope or (None, None))),
                 ).fetchone()
                 if row:
                     return row[0]
             default_title = "Trợ lý gia đình" if kind == "home" else "New chat"
             title = (last_user_message or default_title)[:60]
             row = conn.execute(
-                "INSERT INTO conversations (user_id, title, kind) VALUES (%s, %s, %s) RETURNING id",
-                (user["id"], title, kind),
+                "INSERT INTO conversations (user_id, title, kind, crm_customer_id, crm_product_id) "
+                "VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                (user["id"], title, kind, *(crm_scope or (None, None))),
             ).fetchone()
             return row[0]
 
@@ -1928,7 +1945,7 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         pool = db.get_pool()
         with pool.connection() as conn:
             row = conn.execute(
-                "SELECT id FROM conversations WHERE user_id = %s ORDER BY created_at ASC LIMIT 1",
+                "SELECT id FROM conversations WHERE user_id = %s AND kind = 'chat' ORDER BY created_at ASC LIMIT 1",
                 (voice_user_id,),
             ).fetchone()
             if row:
@@ -2329,6 +2346,30 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
 
     # --- CRM: all records are scoped to the authenticated account ---
 
+    def require_crm_resource(self, user, resource, resource_id, write=False, parent_id=None):
+        if type(resource_id) is not int or not crm.can_access_resource(
+                db.get_pool(), user["id"], resource, resource_id, write, parent_id):
+            self.write_json({"error": "Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập."}, 404)
+            return False
+        return True
+
+    def handle_crm_customer_shares(self, customer_id, update=False):
+        user = self.require_crm_access()
+        if not user or not self.require_crm_resource(user, "customer", customer_id, write=True):
+            return
+        if update:
+            try:
+                payload = self.read_json()
+                if not isinstance(payload, dict):
+                    raise ValueError("Invalid JSON object")
+            except ValueError as exc:
+                self.write_json({"error": str(exc)}, 400)
+                return
+            result = crm.set_customer_shares(db.get_pool(), user["id"], customer_id, payload.get("user_ids"))
+        else:
+            result = crm.customer_sharing(db.get_pool(), user["id"], customer_id)
+        self.write_json(result, 400 if result.get("error") else 200)
+
     def crm_scope_params(self):
         query_params = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
         try:
@@ -2342,7 +2383,7 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         user = self.require_crm_access()
         if not user:
             return
-        self.write_json({"customers": crm.list_customers(db.get_pool())})
+        self.write_json({"customers": crm.list_customers(db.get_pool(), user["id"])})
 
     def handle_crm_create_customer(self):
         user = self.require_crm_access()
@@ -2360,6 +2401,8 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         user = self.require_crm_access()
         if not user:
             return
+        if not self.require_crm_resource(user, "customer", customer_id, write=True):
+            return
         try:
             payload = self.read_json()
         except json.JSONDecodeError:
@@ -2371,6 +2414,8 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
     def handle_crm_delete_customer(self, customer_id):
         user = self.require_crm_access()
         if not user:
+            return
+        if not self.require_crm_resource(user, "customer", customer_id, write=True):
             return
         self.write_json(crm.delete_customer(db.get_pool(), customer_id))
 
@@ -2396,7 +2441,8 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         user = self.require_crm_access()
         if not user:
             return
-        self.write_json(crm.delete_product(db.get_pool(), product_id))
+        result = crm.delete_product(db.get_pool(), product_id, user["id"])
+        self.write_json(result, 400 if result.get("error") else 200)
 
     def handle_crm_list_requirements(self):
         user = self.require_crm_access()
@@ -2405,6 +2451,8 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         customer_id, product_id = self.crm_scope_params()
         if not customer_id or not product_id:
             self.write_json({"error": "customer_id and product_id are required"}, 400)
+            return
+        if not self.require_crm_resource(user, "customer", customer_id, write=False):
             return
         self.write_json({"requirements": crm.list_requirements(db.get_pool(), customer_id, product_id)})
 
@@ -2422,6 +2470,8 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         if not customer_id or not product_id:
             self.write_json({"error": "customer_id and product_id are required"}, 400)
             return
+        if not self.require_crm_resource(user, "customer", customer_id, write=True):
+            return
         result = crm.add_requirement(
             db.get_pool(),
             customer_id,
@@ -2435,6 +2485,8 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
     def handle_crm_update_requirement(self, requirement_id):
         user = self.require_crm_access()
         if not user:
+            return
+        if not self.require_crm_resource(user, "requirement", requirement_id, write=True):
             return
         try:
             payload = self.read_json()
@@ -2450,6 +2502,8 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         user = self.require_crm_access()
         if not user:
             return
+        if not self.require_crm_resource(user, "requirement", requirement_id, write=True):
+            return
         self.write_json(crm.delete_requirement(db.get_pool(), requirement_id))
 
     def handle_crm_list_documents(self):
@@ -2459,6 +2513,8 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         customer_id, product_id = self.crm_scope_params()
         if not customer_id or not product_id:
             self.write_json({"error": "customer_id and product_id are required"}, 400)
+            return
+        if not self.require_crm_resource(user, "customer", customer_id, write=False):
             return
         query_params = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
         include_all = query_params.get("all", ["0"])[0] == "1"
@@ -2479,6 +2535,8 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         product_id = payload.get("product_id")
         if not customer_id or not product_id:
             self.write_json({"error": "customer_id and product_id are required"}, 400)
+            return
+        if not self.require_crm_resource(user, "customer", customer_id, write=True):
             return
         filename = (payload.get("filename") or "document.txt").strip()
         try:
@@ -2508,11 +2566,88 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             self.write_json({"error": str(exc)}, 502)
             return
+        result.update(crm.analyze_document(db.get_pool(), result["id"], module_config(user, "crm")))
         self.write_json(result, 201)
+
+    def handle_crm_get_document(self, document_id, download=False):
+        user = self.require_crm_access()
+        if not user:
+            return
+        if not self.require_crm_resource(user, "document", document_id, write=False):
+            return
+        if download:
+            row = crm.get_document_file(db.get_pool(), document_id)
+            if not row or row[1] is None:
+                self.write_json({"error": "File gốc chưa được lưu cho phiên bản này; hãy xem văn bản đã trích xuất."}, 404)
+                return
+            raw = bytes(row[1])
+            self.send_headers(200, "application/octet-stream", {
+                "Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(row[0], safe=""),
+                "Content-Length": str(len(raw)),
+                "X-Content-Type-Options": "nosniff",
+                "Cache-Control": "no-store",
+            })
+            self.wfile.write(raw)
+            return
+        doc = crm.get_document(db.get_pool(), document_id)
+        if not doc:
+            self.write_json({"error": "document not found"}, 404)
+            return
+        doc["requirements"] = crm.list_document_requirements(
+            db.get_pool(), doc["customer_id"], doc["product_id"], document_id)
+        self.write_json(doc)
+
+    def handle_crm_analyze_document(self, document_id):
+        user = self.require_crm_access()
+        if not user:
+            return
+        if not self.require_crm_resource(user, "document", document_id, write=True):
+            return
+        result = crm.analyze_document(db.get_pool(), document_id, module_config(user, "crm"))
+        self.write_json(result, 404 if result.get("error") else 200)
+
+    def handle_crm_requirement_completed(self, requirement_id):
+        user = self.require_crm_access()
+        if not user:
+            return
+        if not self.require_crm_resource(user, "document_requirement", requirement_id, write=True):
+            return
+        try:
+            payload = self.read_json()
+            if not isinstance(payload, dict):
+                raise ValueError("Invalid JSON object")
+            status = payload.get("status")
+            if "status" not in payload and type(payload.get("completed")) is bool:
+                status = "done" if payload["completed"] else "todo"
+            if not isinstance(status, str) or status not in ("todo", "progress", "done", "rejected"):
+                raise ValueError("status must be todo, progress, done or rejected")
+        except ValueError as exc:
+            self.write_json({"error": str(exc)}, 400)
+            return
+        result = crm.set_document_requirement_status(db.get_pool(), requirement_id, status)
+        self.write_json(result, 404 if result.get("error") else 200)
+
+    def handle_crm_delete_document_requirements(self, document_id, requirement_id=None):
+        user = self.require_crm_access()
+        if not user:
+            return
+        resource, resource_id = ("document_requirement", requirement_id) if requirement_id is not None else ("document", document_id)
+        if not self.require_crm_resource(user, resource, resource_id, write=True):
+            return
+        if requirement_id is not None:
+            with db.get_pool().connection() as conn:
+                row = conn.execute("SELECT document_id FROM crm_document_requirements WHERE id = %s", (requirement_id,)).fetchone()
+            if not row:
+                self.write_json({"error": "requirement not found"}, 404)
+                return
+            document_id = row[0]
+        self.write_json(crm.delete_document_requirements(db.get_pool(), document_id, requirement_id))
 
     def handle_crm_delete_document(self, document_id):
         user = self.require_crm_access()
         if not user:
+            return
+        if not self.require_crm_resource(user, "document", document_id, write=True):
             return
         self.write_json(crm.delete_document(db.get_pool(), document_id))
 
@@ -2523,6 +2658,8 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         customer_id, product_id = self.crm_scope_params()
         if not customer_id or not product_id:
             self.write_json({"error": "customer_id and product_id are required"}, 400)
+            return
+        if not self.require_crm_resource(user, "customer", customer_id, write=False):
             return
         self.write_json({"proposals": crm.list_proposals(db.get_pool(), customer_id, product_id)})
 
@@ -2540,6 +2677,8 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         if not customer_id or not product_id:
             self.write_json({"error": "customer_id and product_id are required"}, 400)
             return
+        if not self.require_crm_resource(user, "customer", customer_id, write=True):
+            return
         result = crm.create_proposal(
             db.get_pool(), customer_id, product_id, payload.get("title"), payload.get("content"), user["id"]
         )
@@ -2548,6 +2687,8 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
     def handle_crm_update_proposal(self, proposal_id):
         user = self.require_crm_access()
         if not user:
+            return
+        if not self.require_crm_resource(user, "proposal", proposal_id, write=True):
             return
         try:
             payload = self.read_json()
@@ -2561,12 +2702,16 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         user = self.require_crm_access()
         if not user:
             return
+        if not self.require_crm_resource(user, "proposal", proposal_id, write=True):
+            return
         result = crm.finalize_proposal(db.get_pool(), proposal_id)
         self.write_json(result, 404 if result.get("error") else 200)
 
     def handle_crm_delete_proposal(self, proposal_id):
         user = self.require_crm_access()
         if not user:
+            return
+        if not self.require_crm_resource(user, "proposal", proposal_id, write=True):
             return
         self.write_json(crm.delete_proposal(db.get_pool(), proposal_id))
 
@@ -2585,29 +2730,36 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         if not customer_id or not product_id:
             self.write_json({"error": "customer_id and product_id are required"}, 400)
             return
+        if not self.require_crm_resource(user, "customer", customer_id, write=False):
+            return
         if not text:
             self.write_json({"error": "message must not be empty"}, 400)
             return
 
         pool = db.get_pool()
-        customer = crm.get_customer(pool, customer_id)
+        customer = crm.get_customer(pool, customer_id, user["id"])
         product = crm.get_product(pool, product_id)
         if not customer or not product:
             self.write_json({"error": "customer or product not found"}, 404)
             return
 
         cfg = module_config(user, "crm")
-        conversation_id = self.ensure_conversation(user, payload.get("conversation_id"), text, kind="crm")
-        history_limit = int(os.getenv("CRM_CONTEXT_MESSAGES", "20"))
-        history = self.voice_history_messages(conversation_id, history_limit)
-        messages = history + [{"role": "user", "content": text}]
-
         try:
+            conversation_id = self.ensure_conversation(
+                user, payload.get("conversation_id"), text, kind="crm", crm_scope=(customer_id, product_id))
+            history_limit = int(os.getenv("CRM_CONTEXT_MESSAGES", "20"))
+            history = self.voice_history_messages(conversation_id, history_limit)
+            messages = history + [{"role": "user", "content": text}]
             reply, tool_events = crm.run_agent(cfg, pool, customer, product, user["id"], messages)
+        except PermissionError:
+            self.write_json({"error": "Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập."}, 404)
+            return
         except Exception as exc:
             self.write_json({"error": str(exc)}, 502)
             return
 
+        if not self.require_crm_resource(user, "customer", customer_id):
+            return
         self.persist_turn(conversation_id, text, reply)
         self.write_json(
             {
@@ -2623,6 +2775,8 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         user = self.require_crm_access()
         if not user:
             return
+        if not self.require_crm_resource(user, "proposal", proposal_id, write=True):
+            return
         try:
             payload = self.read_json()
         except json.JSONDecodeError:
@@ -2635,11 +2789,15 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         user = self.require_crm_access()
         if not user:
             return
+        if not self.require_crm_resource(user, "proposal", proposal_id, write=False):
+            return
         self.write_json({"attachments": crm.list_proposal_attachments(db.get_pool(), proposal_id)})
 
     def handle_crm_upload_proposal_attachment(self, proposal_id):
         user = self.require_crm_access()
         if not user:
+            return
+        if not self.require_crm_resource(user, "proposal", proposal_id, write=True):
             return
         try:
             payload = self.read_json()
@@ -2666,9 +2824,11 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
             return
         self.write_json(result, 400 if result.get("error") else 201)
 
-    def handle_crm_delete_proposal_attachment(self, attachment_id):
+    def handle_crm_delete_proposal_attachment(self, attachment_id, proposal_id):
         user = self.require_crm_access()
         if not user:
+            return
+        if not self.require_crm_resource(user, "attachment", attachment_id, write=True, parent_id=proposal_id):
             return
         self.write_json(crm.delete_proposal_attachment(db.get_pool(), attachment_id))
 
@@ -3033,6 +3193,33 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
         return collected
 
 
+class ThreadingHTTPSServer(ThreadingHTTPServer):
+    """TLS variant of ThreadingHTTPServer.
+
+    Wrapping the *listening* socket in TLS (the common ssl.wrap_socket(server.socket, ...)
+    recipe) makes accept() perform the TLS handshake inline, in the single
+    thread that runs the accept loop -- one client that opens a TCP
+    connection and never completes (or stalls) the handshake then blocks
+    accept() forever, wedging the whole server for every other client too
+    (this is exactly what internet port-scanners do). Doing the handshake
+    here instead, inside finish_request (which ThreadingMixIn already runs
+    in its own per-connection thread), keeps a stuck/bad handshake isolated
+    to that one connection.
+    """
+
+    def __init__(self, address, handler_class, certfile, keyfile):
+        super().__init__(address, handler_class)
+        self.ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        self.ssl_context.load_cert_chain(certfile, keyfile)
+
+    def finish_request(self, request, client_address):
+        try:
+            request = self.ssl_context.wrap_socket(request, server_side=True)
+        except (ssl.SSLError, OSError):
+            return
+        self.RequestHandlerClass(request, client_address, self)
+
+
 def main():
     cfg = config()
     db.bootstrap()
@@ -3041,10 +3228,9 @@ def main():
     print(f"DuyGPT running at http://{cfg['host']}:{cfg['port']}")
 
     if cfg["ssl_cert_file"] and cfg["ssl_key_file"]:
-        https_server = ThreadingHTTPServer((cfg["https_host"], cfg["https_port"]), DuyGPTHandler)
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.load_cert_chain(cfg["ssl_cert_file"], cfg["ssl_key_file"])
-        https_server.socket = context.wrap_socket(https_server.socket, server_side=True)
+        https_server = ThreadingHTTPSServer(
+            (cfg["https_host"], cfg["https_port"]), DuyGPTHandler, cfg["ssl_cert_file"], cfg["ssl_key_file"]
+        )
         threading.Thread(target=https_server.serve_forever, daemon=True).start()
         print(f"DuyGPT voice/demo HTTPS running at https://{cfg['https_host']}:{cfg['https_port']}")
 
