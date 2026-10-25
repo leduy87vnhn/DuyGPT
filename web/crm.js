@@ -682,6 +682,11 @@ async function generateDocumentRequirements(id, button, status, force = false) {
     } else if (result.analysis_status === 'failed') {
       status.textContent = `Chưa tạo được danh sách: ${result.analysis_error || 'Vui lòng thử lại.'}`;
     } else if (result.analysis_status === 'ready') {
+      if (!result.requirement_count) {
+        status.textContent = 'AI không tìm thấy requirement hợp lệ trong nội dung file. Kiểm tra tab Nội dung raw hoặc chọn model CRM khác rồi thử lại.';
+      } else {
+        status.textContent = `Đã phân tích lại và tạo ${result.requirement_count} requirement, gồm cả ngữ cảnh áp dụng.`;
+      }
       await openDocument(id, 'requirements');
       await Promise.all([loadDocuments(), loadRequirements()]);
     } else {
