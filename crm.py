@@ -997,7 +997,7 @@ def extract_requirements(cfg, text):
     return list(requirements.values())
 
 
-def analyze_document(pool, document_id, cfg):
+def analyze_document(pool, document_id, cfg, force=False):
     doc = get_document(pool, document_id)
     if not doc:
         return {'error': 'document not found'}
@@ -1009,7 +1009,7 @@ def analyze_document(pool, document_id, cfg):
         status = conn.execute('SELECT analysis_status FROM crm_documents WHERE id = %s', (document_id,)).fetchone()
         if not status:
             return {'error': 'document not found'}
-        if status[0] == 'ready':
+        if status[0] == 'ready' and not force:
             return {'analysis_status': 'ready', 'analysis_error': ''}
         try:
             items = extract_requirements(cfg, doc['raw_text'])
@@ -1029,6 +1029,8 @@ def analyze_document(pool, document_id, cfg):
                 'SELECT requirement, status, target_file, target_screen, target_module FROM crm_document_requirements WHERE document_id = %s',
                 (previous[0],),
             ).fetchall()}
+        if force:
+            conn.execute('DELETE FROM crm_document_requirements WHERE document_id = %s', (document_id,))
         for requirement, quote, source_completed, targets in items:
             status = ('done' if source_completed else 'todo') if source_completed is not None else previous_statuses.get(
                 _requirement_key(requirement, targets), 'todo')

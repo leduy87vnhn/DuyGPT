@@ -2603,7 +2603,9 @@ class DuyGPTHandler(BaseHTTPRequestHandler):
             return
         if not self.require_crm_resource(user, "document", document_id, write=True):
             return
-        result = crm.analyze_document(db.get_pool(), document_id, module_config(user, "crm"))
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        force = query.get('force', ['0'])[-1].lower() in ('1', 'true', 'yes')
+        result = crm.analyze_document(db.get_pool(), document_id, module_config(user, "crm"), force=force)
         self.write_json(result, 404 if result.get("error") else 200)
 
     def handle_crm_requirement_completed(self, requirement_id):

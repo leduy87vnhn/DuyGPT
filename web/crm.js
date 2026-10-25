@@ -389,6 +389,19 @@ function deleteAllRequirementsButton(doc) {
   return button;
 }
 
+function reanalyzeRequirementsButton(doc) {
+  const button = document.createElement('button');
+  button.type = 'button'; button.className = 'secondary small';
+  button.title = 'Xóa và phân tích lại toàn bộ requirement của phiên bản này';
+  button.setAttribute('aria-label', `Phân tích lại yêu cầu: ${doc.title}, phiên bản ${doc.version}`);
+  button.textContent = 'Phân tích lại yêu cầu';
+  button.addEventListener('click', async () => {
+    if (!confirm(`Xóa danh sách requirement hiện tại và phân tích lại file "${doc.title}" — phiên bản ${doc.version}?`)) return;
+    await generateDocumentRequirements(doc.id, button, document.querySelector('#requirementAnalysisNotice'), true);
+  });
+  return button;
+}
+
 function renderRequirements(requirements, target = els.requirementList) {
   if (!requirements.length) {
     target.innerHTML = '<p class="muted-note">Chưa có mục ghi nhận nào.</p>';
@@ -581,7 +594,9 @@ function renderDocuments(documents) {
         actions.append(open);
       }
       if (canEditCustomer()) {
-        if (doc.analysis_status === 'ready') actions.append(deleteAllRequirementsButton(doc));
+        if (doc.analysis_status === 'ready') {
+          actions.append(deleteAllRequirementsButton(doc), reanalyzeRequirementsButton(doc));
+        }
         actions.append(del);
       }
       header.append(title, actions);
@@ -652,7 +667,7 @@ async function crmRequest(url, options) {
   return data;
 }
 
-async function generateDocumentRequirements(id, button, status) {
+async function generateDocumentRequirements(id, button, status, force = false) {
   const customerId = state.selectedCustomerId;
   const productId = state.selectedProductId;
   const label = button.textContent;
@@ -660,7 +675,7 @@ async function generateDocumentRequirements(id, button, status) {
   button.textContent = 'Đang tạo…';
   status.textContent = 'AI đang phân tích file và tạo danh sách Requirement… Thời gian chờ AI tối đa 30 phút mỗi lượt. Vui lòng giữ trang mở.';
   try {
-    const result = await crmRequest(`/api/crm/documents/${id}/analyze`, { method: 'POST' });
+    const result = await crmRequest(`/api/crm/documents/${id}/analyze${force ? '?force=1' : ''}`, { method: 'POST' });
     if (customerId !== state.selectedCustomerId || productId !== state.selectedProductId) return;
     if (result.analysis_status === 'running') {
       status.textContent = 'File này đang được phân tích. Hãy mở lại danh sách sau khi hoàn tất.';
